@@ -1,0 +1,170 @@
+#!/usr/bin/python3
+import sys, os, subprocess, time, json, gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk
+
+ZMON_CONSTANT = {
+    "label": {
+        "title": "zmon",
+        "version": "v24218",
+        "author": "Andreas 'cr4qsh0t' Riebesehl"
+    },
+    "id": {
+        "sub": [("ISA adapter", "isa"), ("PCI adapter", "pci"), (" ", "-")], # WARNING: order important!
+        "channel": "%adapter%:%module%:%physical%:%type%",
+        "template": {
+            "user": "%adapter%:%module%:%physical%(%canonical%)"
+        }
+    },
+    "init": {
+        "app":  {},
+        "gui":  {},
+        "user": {"sleep": 0.005, "depth": 60, "rate": 1.0, "hide": True},
+        "data": {"raw": dict(), "info": dict(), "list": dict(), "min": dict(), "max": dict()}
+    },
+    "limit": {
+        "user": {
+            "rate":  {"min": 0.25},
+            "depth": {"min": 8},
+            "sleep": {"min": 0.001, "max": 0.1}
+        }
+    }
+}
+def ZMON_FUNC_ChannelID(lFormat, iInfo):
+    for lMatch, lReplace in [(f"%{k}%", v) for k, v in iInfo.items()] + ZMON_CONSTANT["id"]["sub"]:
+        lFormat = lFormat.replace(lMatch, lReplace)
+    return lFormat
+def ZMON_FUNC_SystemRun(iCommand, iCapture = False, iEncoding = "utf-8"):
+    lProcess = subprocess.run(iCommand, capture_output = iCapture, encoding = iEncoding)
+    lReturn = {"command": lProcess.args, "code": lProcess.returncode}
+    if lProcess.stdout:
+        lReturn["out"] = lProcess.stdout
+    if lProcess.stderr:
+        lReturn["error"] = lProcess.stderr
+    return lReturn
+
+class ZMON_WINDOW(Gtk.Window):
+    def __init__(self, iArg):
+        # init state
+        self.app  = ZMON_CONSTANT["init"]["app"]
+        self.gui  = ZMON_CONSTANT["init"]["gui"]
+        self.user = ZMON_CONSTANT["init"]["user"]
+        self.data = ZMON_CONSTANT["init"]["data"]
+        # apply args
+        self.app["arg"] = iArg
+        # apply limits
+        for lTarget in ZMON_CONSTANT["limit"]:
+            for lName in ZMON_CONSTANT["limit"][lTarget]:
+                for lType, lLimit in ZMON_CONSTANT["limit"][lTarget][lName].items():
+                    lDict = {"user": self.user, "app": self.app, "gui": self.gui, "data": self.data}.get(lTarget, {})
+                    if lType == "max":
+                        lDict[lName] = min(lDict.get(lName, ZMON_CONSTANT["init"][lTarget][lName]), lLimit)
+                    elif lType == "min":
+                        lDict[lName] = max(lDict.get(lName, ZMON_CONSTANT["init"][lTarget][lName]), lLimit)
+        # gtk window
+        super().__init__(title = f"{ZMON_CONSTANT['label']['title']}-{ZMON_CONSTANT['label']['version']}")
+        self.set_border_width(10)
+        self.grid = Gtk.Grid()  # Setting up the self.grid in which the elements are to be positioned
+        self.grid.set_column_homogeneous(True)
+        self.grid.set_row_homogeneous(True)
+        self.add(self.grid)
+        # gtk list
+        self.gui["listData"] = Gtk.ListStore(str, str, str, str, str)
+        self.gui["listObj"] = Gtk.TreeView(model = self.gui["listData"])
+        for i, lLabel in enumerate(["Channel", "Last", "Min.", "Max.", "Avg."]):
+            lColumn = Gtk.TreeViewColumn(lLabel, Gtk.CellRendererText(), text = i)
+            lColumn.set_expand(True)
+            lColumn.set_resizable(True)
+            lColumn.set_min_width(int(800 * 0.8 * (0.125 if i else 0.5)))
+            lColumn.set_sizing(Gtk.TreeViewColumnSizing(2))
+            self.gui["listObj"].append_column(lColumn)
+        self.gui["menuObj"] = Gtk.Button(label = "Menu")
+        self.gui["checkIdle"] = Gtk.CheckButton(label = "Hide idle channels", active = self.user["hide"])
+        
+        self.connect("destroy", self.ZMON_UserQuit)
+        self.gui["menuObj"].connect("clicked", self.ZMON_UserMenu)
+        self.gui["checkIdle"].connect("clicked", self.ZMON_UserIdle)
+        # for x in ["Java", "C", "C++", "Python", "None"]:
+            # button = Gtk.Button(label=x)
+            # button.connect("clicked", self.on_selection_button_clicked)
+            # self.buttons.append(button)
+
+        # setting up the layout, putting the treeview in a scrollwindow, and the buttons in a row
+        self.scrollable_treelist = Gtk.ScrolledWindow()
+        self.scrollable_treelist.set_min_content_width(800)
+        self.scrollable_treelist.set_min_content_height(500)
+        self.scrollable_treelist.set_vexpand(True)
+        self.grid.attach(self.scrollable_treelist, 0, 0, 80, 50)
+        self.grid.attach(self.gui["menuObj"], 72, 50, 8, 8)
+        self.grid.attach(self.gui["checkIdle"], 0, 50, 16, 8)
+        # for i, button in enumerate(self.buttons[1:]):
+            # self.grid.attach_next_to(button, self.buttons[i], Gtk.PositionType.RIGHT, 1, 1)
+        self.scrollable_treelist.add(self.gui["listObj"])
+        self.show_all()
+        
+    def ZMON_UserIdle(self, widget):
+        self.user["hide"] = widget.get_active()
+        self.app["render"] = True
+    def ZMON_UserMenu(self, widget):
+        print("derp")
+        self.app["render"] = True
+    def ZMON_UserQuit(self, widget):
+        self.app["quit"] = True
+    def ZMON_Main(self):
+        while (not self.app.setdefault("quit", False)):
+            # enter loop
+            self.app["count"] = self.app.get("count", 0) + 1
+            self.app["last"] = self.app.get("now", 0.0)
+            self.app["now"] = time.time()
+            # handle GUI
+            while Gtk.events_pending():
+                Gtk.main_iteration_do(blocking = False)
+            # read data if necessary
+            if self.app["now"] - self.user.setdefault("read", self.app["now"] - self.user["rate"]) >= self.user["rate"]:
+                self.user["read"] += float(int((self.app["now"] - self.user["read"]) / self.user["rate"])) * self.user["rate"]
+                self.ZMON_Read()
+                self.ZMON_Process()
+                self.app["render"] = True
+            # render if requested, else sleep
+            if self.app.setdefault("render", False):
+                self.ZMON_Render()
+                self.app["render"] = False
+            else:
+                self.ZMON_Idle()
+    def ZMON_Idle(self):
+        time.sleep(self.user["sleep"])
+    def ZMON_Read(self):
+        self.data["raw"] = json.loads((ZMON_FUNC_SystemRun(["sensors", "-j"], iCapture = True).get("out", "{}")))
+    def ZMON_Process(self):
+        for lModule, lData in self.data["raw"].items():
+            for lCanonical, lValues in lData.items():
+                if isinstance(lValues, dict):
+                    for lPhysical, lReading in lValues.items():
+                        if isinstance(lReading, float) or isinstance(lReading, int):
+                            lInfo = {"module": lModule, "adapter": lData.get('Adapter', 'unknown'), "canonical": lCanonical}
+                            lInfo["physical"], lInfo["type"] = lPhysical.split("_", 1)
+                            lID = ZMON_FUNC_ChannelID(ZMON_CONSTANT["id"]["channel"], lInfo)
+                            self.data["info"][lID] = lInfo
+                            if len(self.data["list"].setdefault(lID, [])) > (self.user["depth"] - 1):
+                                self.data["list"][lID].pop()
+                            self.data["list"][lID].insert(0, lReading)
+                            self.data["min"][lID] = min(lReading, self.data["min"].get(lID, lReading))
+                            self.data["max"][lID] = max(lReading, self.data["max"].get(lID, lReading))
+    def ZMON_Data(self, iChannel):
+        return [self.data["list"][iChannel][0], self.data["min"][iChannel], self.data["max"][iChannel], sum(self.data["list"][iChannel]) / max(1, len(self.data["list"][iChannel]))]
+    def ZMON_Render(self):
+        lFilter = [k for k, v in self.data["list"].items() if (len(set(v)) != 1 if self.user["hide"] else True)]
+        lData = [[(x if isinstance(x, str) else f"{x:.4g}") for x in [lChannel] + self.ZMON_Data(lChannel)] for lChannel in lFilter]
+        lGUI = {}
+        for i, x in enumerate(self.gui["listData"]):
+            lGUI[x[0]] = i
+        if set(lFilter) != set(lGUI.keys()):
+            self.gui["listData"].clear()
+            for x in lData:
+                self.gui["listData"].append(x)
+        else:
+            for x in lData:
+                self.gui["listData"][lGUI[x[0]]] = x
+
+if __name__ == "__main__":
+    ZMON_WINDOW(sys.argv).ZMON_Main()
