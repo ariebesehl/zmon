@@ -6,7 +6,7 @@ from gi.repository import Gtk
 ZMON_CONSTANT = {
     "label": {
         "title": "zmon",
-        "version": "v24218",
+        "version": "v24240",
         "author": "Andreas 'cr4qsh0t' Riebesehl"
     },
     "id": {
