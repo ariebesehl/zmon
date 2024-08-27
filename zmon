@@ -78,35 +78,31 @@ class ZMON_WINDOW(Gtk.Window):
             lColumn.set_min_width(int(800 * 0.8 * (0.125 if i else 0.5)))
             lColumn.set_sizing(Gtk.TreeViewColumnSizing(2))
             self.gui["listObj"].append_column(lColumn)
-        self.gui["menuObj"] = Gtk.Button(label = "Menu")
+        self.gui["clearObj"] = Gtk.Button(label = "Clear")
         self.gui["checkIdle"] = Gtk.CheckButton(label = "Hide idle channels", active = self.user["hide"])
         
         self.connect("destroy", self.ZMON_UserQuit)
-        self.gui["menuObj"].connect("clicked", self.ZMON_UserMenu)
+        self.gui["clearObj"].connect("clicked", self.ZMON_UserClear)
         self.gui["checkIdle"].connect("clicked", self.ZMON_UserIdle)
-        # for x in ["Java", "C", "C++", "Python", "None"]:
-            # button = Gtk.Button(label=x)
-            # button.connect("clicked", self.on_selection_button_clicked)
-            # self.buttons.append(button)
 
         # setting up the layout, putting the treeview in a scrollwindow, and the buttons in a row
         self.scrollable_treelist = Gtk.ScrolledWindow()
         self.scrollable_treelist.set_min_content_width(800)
-        self.scrollable_treelist.set_min_content_height(500)
+        self.scrollable_treelist.set_min_content_height(540)
         self.scrollable_treelist.set_vexpand(True)
-        self.grid.attach(self.scrollable_treelist, 0, 0, 80, 50)
-        self.grid.attach(self.gui["menuObj"], 72, 50, 8, 8)
-        self.grid.attach(self.gui["checkIdle"], 0, 50, 16, 8)
-        # for i, button in enumerate(self.buttons[1:]):
-            # self.grid.attach_next_to(button, self.buttons[i], Gtk.PositionType.RIGHT, 1, 1)
+        self.grid.attach(self.scrollable_treelist, 0, 0, 80, 54)
+        self.grid.attach(self.gui["clearObj"], 0, 54, 8, 4)
+        self.grid.attach(self.gui["checkIdle"], 64, 54, 16, 4)
         self.scrollable_treelist.add(self.gui["listObj"])
         self.show_all()
         
     def ZMON_UserIdle(self, widget):
         self.user["hide"] = widget.get_active()
         self.app["render"] = True
-    def ZMON_UserMenu(self, widget):
-        print("derp")
+    def ZMON_UserClear(self, widget):
+        self.data["min"] = {}
+        self.data["max"] = {}
+        self.app["force"] = True
         self.app["render"] = True
     def ZMON_UserQuit(self, widget):
         self.app["quit"] = True
@@ -120,10 +116,11 @@ class ZMON_WINDOW(Gtk.Window):
             while Gtk.events_pending():
                 Gtk.main_iteration_do(blocking = False)
             # read data if necessary
-            if self.app["now"] - self.user.setdefault("read", self.app["now"] - self.user["rate"]) >= self.user["rate"]:
-                self.user["read"] += float(int((self.app["now"] - self.user["read"]) / self.user["rate"])) * self.user["rate"]
+            if self.app.get("force", False) or self.app["now"] - self.user.setdefault("read", self.app["now"] - self.user["rate"]) >= self.user["rate"]:
+                self.user["read"] += float(int((0.5 if self.app.get("force", False) else 0.0) + (self.app["now"] - self.user["read"]) / self.user["rate"])) * self.user["rate"]
                 self.ZMON_Read()
                 self.ZMON_Process()
+                self.app["force"] = False
                 self.app["render"] = True
             # render if requested, else sleep
             if self.app.setdefault("render", False):
