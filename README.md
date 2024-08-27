@@ -1,4 +1,8 @@
 # zmon
-Quick &amp; dirty HWMonitor-clone for Linux, written in Python and using GTK-bindings; far from finished, but already usable enough for me
-![2024-08-27_zmon-1](https://github.com/user-attachments/assets/0844e114-6f64-4d5d-82b4-94a9849e55f8)
-![2024-08-27_zmon-2](https://github.com/user-attachments/assets/d509a2cb-2991-4620-ae06-7f340ac7673e)
+Quick &amp; dirty HWMonitor-clone for Linux, written in Python and using GTK-bindings.
+Far from finished, a work-in-progress.
+Requires Python and its standard libraries, as well as Python GTK3.0-bindings (which may or may not be included in standard libraries), and `sensors` ([lm-sensors](https://en.wikipedia.org/wiki/Lm_sensors)) as a %PATH% executable.
+Works out-of-the-box on GTK-derived GNU/Linux distributions such as LMDE 6 'Faye'.
+*Should* work with other systems (Windows, KDE-derived distributions) as well as long as the Python environment is set up correctly and lm-sensors is available.
+![2024-08-27_zmon-1](https://github.com/user-attachments/assets/a01c8b55-916e-42d5-89e1-08d029a3c824)
+![2024-08-27_zmon-2](https://github.com/user-attachments/assets/8ce9a297-faac-4f6c-a12d-89b830c48848)
